@@ -1,22 +1,50 @@
-"""make.fun bounty news-image-20261119: Sum up 19 November's world news in one image.
+"""news-image-20261119: one image that sums up Thursday 19 November 2026.
 
-The image (entry.png, drawn with PIL from real 19 Nov 2026 news) sits beside
-this file. The program copies it, byte for byte, to /output/entry.png.
-No network, no randomness, no input: two runs write identical bytes.
-Run locally:  mkdir -p out && MAKEFUN_OUTPUT_DIR=out python3 main.py
+The picture itself is entry.png, drawn from the day's real news with PIL.
+This program only places that file where the grader looks for it:
+``/output/entry.png``, or the directory named by MAKEFUN_OUTPUT_DIR when
+run outside the grader.
+
+Nothing is fetched and nothing is random, so running it twice writes the
+same bytes twice.
 """
+
 import os
 import shutil
+import sys
+from pathlib import Path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-SRC = os.path.join(HERE, "entry.png")
+IMAGE_NAME = "entry.png"
+MAX_BYTES = 1_048_576
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
-# Fail loudly (instead of a silent partial run) if the bundled image is missing.
-if not os.path.isfile(SRC):
-    raise SystemExit("entry.png not found next to main.py")
 
-# The output keeps the name entry.png: the gate reads the format from the
-# file's first bytes, and this one is a whole PNG, 1024x1024, under 1 MiB.
-os.makedirs(OUT, exist_ok=True)
-shutil.copyfile(SRC, os.path.join(OUT, "entry.png"))
+def fail(message):
+    print("main.py: " + message, file=sys.stderr)
+    raise SystemExit(1)
+
+
+def main():
+    here = Path(__file__).resolve().parent
+    source = here / IMAGE_NAME
+    if not source.is_file():
+        fail(IMAGE_NAME + " is missing next to main.py")
+    data = source.read_bytes()
+    if data[:8] != PNG_MAGIC:
+        fail(IMAGE_NAME + " is not a PNG file")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    if (width, height) != (1024, 1024):
+        fail(IMAGE_NAME + " is not 1024x1024")
+    if len(data) > MAX_BYTES:
+        fail(IMAGE_NAME + " is over the 1 MiB limit")
+    target_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / IMAGE_NAME
+    shutil.copyfile(source, target)
+    if target.read_bytes() != data:
+        fail("the copied file differs from the source")
+
+
+if __name__ == "__main__":
+    main()
